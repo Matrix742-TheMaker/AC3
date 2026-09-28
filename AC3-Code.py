@@ -1,25 +1,36 @@
 # =========================
 # AP CHEM KINETICS SIMULATOR
-# One-click: press ▶ once
+# With Dynamic pH + pOH
 # =========================
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-# ---------- STUDENT INPUTS (edit only these 4 lines) ----------
-A0 = 0.67        # initial concentration (M)
-k = 1.00          # rate constant (units depend on order)
-order = 0         # 0, 1, or 2
-t_end = 0.66      # total time (arbitrary units)
-# ------------------------------------------------------------
+# ---------- STUDENT INPUTS ----------
+A0 = 5          # initial concentration of reactant A (M)
+k = 1           # rate constant
+order = 1       # reaction order (0,1,2)
+t_end = 10      # total time
+stoich_A = 1    # coefficient of reactant
+stoich_P = 2    # coefficient of product
+H0 = 1e-7       # initial [H+] concentration
+acidic_products = True   # True if reaction produces acid
+# ------------------------------------
 
 # Time axis
-t = np.linspace(0, t_end, 200)
+t = np.linspace(0, t_end, 300)
 
-# Integrated rate law models
-def A_zero(t, A0, k):   return A0 - k*t
-def A_first(t, A0, k):  return A0 * np.exp(-k*t)
-def A_second(t, A0, k): return 1 / (1/A0 + k*t)
+# ----------------------------
+# Integrated Rate Law Models
+# ----------------------------
+def A_zero(t, A0, k):
+    return A0 - k*t
+
+def A_first(t, A0, k):
+    return A0 * np.exp(-k*t)
+
+def A_second(t, A0, k):
+    return 1 / (1/A0 + k*t)
 
 # Generate [A](t)
 if order == 0:
@@ -29,57 +40,148 @@ elif order == 1:
 elif order == 2:
     A = A_second(t, A0, k)
 else:
-    raise ValueError("order must be 0, 1, or 2")
+    raise ValueError("order must be 0,1,2")
 
-# Safety for logs/division
 A = np.clip(A, 1e-12, None)
 
-# Helper: best-fit line and R^2
+# ----------------------------
+# Product Formation
+# ----------------------------
+def product_concentration(A0, A_t, stoich_A, stoich_P):
+    reacted = A0 - A_t
+    return reacted * (stoich_P / stoich_A)
+
+P = product_concentration(A0, A, stoich_A, stoich_P)
+
+# ----------------------------
+# Dynamic pH Model
+# ----------------------------
+if acidic_products:
+    H = H0 + P
+else:
+    H = H0 - P
+    H = np.clip(H, 1e-12, None)
+
+OH = 1e-14 / H
+
+pH = -np.log10(H)
+pOH = -np.log10(OH)
+
+# ----------------------------
+# Best Fit Linearity Test
+# ----------------------------
 def best_fit(x, y):
     m, b = np.polyfit(x, y, 1)
     yhat = m*x + b
-    ss_res = np.sum((y - yhat)**2)
-    ss_tot = np.sum((y - np.mean(y))**2)
+    ss_res = np.sum((y-yhat)**2)
+    ss_tot = np.sum((y-np.mean(y))**2)
     r2 = 1 - ss_res/ss_tot
-    return m, b, r2
+    return m,b,r2
 
-# Compute linearizations
-m0, b0, r2_0 = best_fit(t, A)           # zero-order test
-m1, b1, r2_1 = best_fit(t, np.log(A))   # first-order test
-m2, b2, r2_2 = best_fit(t, 1/A)         # second-order test
+m0,b0,r2_0 = best_fit(t,A)
+m1,b1,r2_1 = best_fit(t,np.log(A))
+m2,b2,r2_2 = best_fit(t,1/A)
 
+# ----------------------------
 # Graphs
-plt.figure(figsize=(5,4))
-plt.plot(t, A)
-plt.xlabel("time")
-plt.ylabel("[A] (M)")
-plt.title("[A] vs time")
+# ----------------------------
+
+plt.figure()
+plt.plot(t,A)
+plt.xlabel("Time")
+plt.ylabel("[A]")
+plt.title("[A] vs Time")
 plt.show()
 
-plt.figure(figsize=(5,4))
-plt.plot(t, np.log(A))
-plt.xlabel("time")
+plt.figure()
+plt.plot(t,np.log(A))
+plt.xlabel("Time")
 plt.ylabel("ln[A]")
-plt.title("ln[A] vs time")
+plt.title("ln[A] vs Time")
 plt.show()
 
-plt.figure(figsize=(5,4))
-plt.plot(t, 1/A)
-plt.xlabel("time")
+plt.figure()
+plt.plot(t,1/A)
+plt.xlabel("Time")
 plt.ylabel("1/[A]")
-plt.title("1/[A] vs time")
+plt.title("1/[A] vs Time")
 plt.show()
 
-# Report
+# Reactant/Product
+
+plt.figure()
+plt.plot(t,A,label="Reactant [A]")
+plt.plot(t,P,label="Product [P]")
+plt.xlabel("Time")
+plt.ylabel("Concentration (M)")
+plt.title("Reaction Progress")
+plt.legend()
+plt.grid()
+plt.show()
+
+# pH and pOH
+
+plt.figure()
+plt.plot(t,pH,label="pH")
+plt.plot(t,pOH,label="pOH")
+plt.xlabel("Time")
+plt.ylabel("Value")
+plt.title("pH and pOH vs Time")
+plt.legend()
+plt.grid()
+plt.show()
+
+# ----------------------------
+# Half Life Model
+# ----------------------------
+def model_half_life(A0,k,order):
+
+    if order == 0:
+        half_life = A0/(2*k)
+        t_plot = np.linspace(0,A0/k,100)
+        conc = A0 - k*t_plot
+
+    elif order == 1:
+        half_life = np.log(2)/k
+        t_plot = np.linspace(0,half_life*4,100)
+        conc = A0*np.exp(-k*t_plot)
+
+    elif order == 2:
+        half_life = 1/(k*A0)
+        t_plot = np.linspace(0,half_life*4,100)
+        conc = 1/(1/A0 + k*t_plot)
+
+    else:
+        raise ValueError("Order must be 0,1,2")
+
+    plt.figure()
+    plt.plot(t_plot,conc)
+    plt.axvline(half_life,linestyle="--")
+    plt.axhline(A0/2,linestyle="--")
+    plt.title(f"{order}-Order Half Life")
+    plt.xlabel("Time")
+    plt.ylabel("[A]")
+    plt.grid()
+    plt.show()
+
+    return half_life
+
+t_half = model_half_life(A0,k,order)
+
+# ----------------------------
+# Results
+# ----------------------------
 print("Linearity check (higher R^2 = more linear):")
-print(f"  [A] vs t:     R^2 = {r2_0:.5f}   (zero-order test)")
-print(f"  ln[A] vs t:   R^2 = {r2_1:.5f}   (first-order test)")
-print(f"  1/[A] vs t:   R^2 = {r2_2:.5f}   (second-order test)\n")
+print(f"[A] vs t R^2 = {r2_0:.5f}")
+print(f"ln[A] vs t R^2 = {r2_1:.5f}")
+print(f"1/[A] vs t R^2 = {r2_2:.5f}")
 
-print("If the plot is linear, slope relates to k like this:")
-print(f"  Zero order:   [A] = -kt + [A]0   => k = {-m0:.5f}")
-print(f"  First order:  ln[A] = -kt + ln[A]0 => k = {-m1:.5f}")
-print(f"  Second order: 1/[A] = kt + 1/[A]0 => k = {m2:.5f}\n")
+print("\nRate constant if linear:")
+print(f"Zero order k = {-m0:.5f}")
+print(f"First order k = {-m1:.5f}")
+print(f"Second order k = {m2:.5f}")
 
-print("You entered:")
-print(f"  order = {order}, A0 = {A0}, k = {k}, t_end = {t_end}")
+print("\nHalf Life =", t_half)
+
+print("\nFinal pH =", pH[-1])
+print("Final pOH =", pOH[-1])
